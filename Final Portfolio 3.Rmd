@@ -1,0 +1,140 @@
+---
+title: "Final Portfolio_3"
+author: "Mutong Yang"
+output: rmarkdown::github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+This dataset is about daily weather observations from numerous Australian weather stations. The variables in this dataset are date, location (name of the location of the weather station), MinTemp (the minimum temperature), MaxTemp (the maximum temperature), Rainfall (the amount of rainfall recorded for the day in mm), Evaporation (The so-called Class A pan evapoartion (mm) in the 24 hors to 9am), Sunshine (the number of hours of bright sunshine in the day), WindGustDir (the direction of the strongest wind gust in the 24 hours to midnight), WindGustSpeed (the speed (km/h) of the strongest wind gust in the 24 hours to midnight), WindDir9am (Direction of the wind at 9am), WindDir3pm (Direction of the wind at 3pm), WindSpeed9am (Wind speed (km/hr) averaged over 10 minutes prior to 9am), WindSpeed3pm (Wind speed (km/hr) averaged over 10 minutes prior to 3pm), Humidity9am, Humidity3pm, Pressure9am (Atmospheric pressure (hpa) reduced to mean sea level at 9am), pressure3pm (Atmospheric pressure (hpa) reduced to mean sea level at 3pm), Cloud9am (Fractiob of sky obscured by cloud at 9am), Cloud3pm (Fractiob of sky obscured by cloud at 3pm), Temp9am, Temp3pm, RainToday (whether the precipitation (mm) in the 24 hours to 9am exceeds 1mm), RISK_MM (The amount of rain), and RainTomorrow (whether it rained tomorrow). Also, all the temperature variables are in degrees celsius.
+
+## Read in Data
+```{r}
+library(dplyr)
+library(ggplot2)
+library(plotly)
+library(lubridate)
+library(ForeCA)
+library(tidyverse)
+library(TSrepr)
+library(ggplot2)
+library(fpc)
+library(reshape2)
+
+setwd("C:/Users/muton/Desktop/BZAN 552 Multivariate Data Mining Techq/Final Portfolios")
+aus <- read.csv("weatherAUS.csv", header = TRUE, stringsAsFactors = F)
+```
+
+## Clean Data
+```{r}
+aus.t <- aus[-which(aus$Location=="Uluru"),] #drop location with too many missing data points
+aus.t$Date <-ymd(aus.t$Date) #convert dates
+loc <- unique(aus.t$Location) #extract unique locations
+```
+
+
+```{r}
+# Find range of dates with data for all locations 
+date.min <- min(aus.t$Date) 
+date.max <- max(aus.t$Date)
+for (i in 1:length(loc)){
+  date.min[i] <- min(aus.t$Date[which(aus.t$Location==loc[i])])  
+  date.max[i] <- max(aus.t$Date[which(aus.t$Location==loc[i])]) 
+}
+
+mindate <- max(date.min)
+maxdate <- min(date.max)
+days <- as.numeric(maxdate-mindate)
+
+
+# Subset data based on day range
+aus.t <- aus.t[which(aus.t$Date>=mindate & aus.t$Date<=maxdate),]
+
+
+# Create standardized index
+index <- rep(1:days, length(loc))
+
+# Set daterange to merge 
+Date <- mindate+(index-1)
+
+locs<-""
+for (i in 1:length(loc)){
+  temp<-loc[i]
+  for (j in 1:days){
+    locs[((i-1)*days)+j]<-temp
+  }
+}
+
+
+# Merge in data to daterange df to keep order when data is missing
+df<-data.frame(index = index, Date = Date, Location = locs)
+aus.2<-merge(df, aus.t, by=c('Location', 'Date'), all.x=T )
+aus.2<-aus.2[order(aus.2[,1], aus.2[,2]),]
+
+
+# Summarize
+summary(aus.2)
+
+```
+
+There is quite a bit to chose from and there seem to be a high number of NAs in some columns. Lets pick something interesting to look at with not that many missing values.
+
+```{r}
+
+# Hierarchical clustering for Max Temp
+dates<-data.frame('Date'=aus.2[1:days,2], "Index"= aus.2[1:days,3])
+temp<-data.frame(dates)
+for (j in 1:length(loc)){
+  
+  temp[[j]]<-aus.2[which(aus.2$Location==loc[j]),c(5)]
+  
+}
+names(temp)<-loc
+maxtemp<-cbind(dates,temp)
+maxtemp[is.na(maxtemp)] <- 0
+
+temp.num<-maxtemp[,3:50]
+x<-scale(temp.num)
+d <- dist(x, method = "euclidean")
+hc<-hclust(d, method="complete")
+plot(hc); abline(h=15, col="red"); rect.hclust(hc, k=5, border="red")
+
+```
+
+Hierchichal clustering the max temp data for each location shows that the temperature is relatively consistent across Australia. This makes sense as the latitude does not change too much across the continent.
+
+5 would be a reasonable cluster number for these time series. It is easy to imagine these being exclusive to regions and affected by their geogrpahic location. 
+
+Lets compare this to wind gust speed.
+
+```{r}
+
+
+# WindGust speed Hierarchical clustering
+dates<-data.frame('Date'=aus.2[1:days,2], "Index"= aus.2[1:days,3])
+wind<-data.frame(dates)
+for (j in 1:length(loc)){
+  
+  wind[[j]]<-aus.2[which(aus.2$Location==loc[j]),c(10)]
+  
+}
+names(wind)<-loc
+gust<-cbind(dates, wind)
+gust[is.na(gust)] <- 0
+
+gust.num<-gust[,3:50]
+x<-scale(gust.num)
+d <- dist(x, method = "euclidean")
+hc<-hclust(d, method="complete")
+plot(hc); abline(h=16, col="red"); rect.hclust(hc, k=8, border="red")
+
+```
+
+
+As can be seen, the number of clusters for WindGust is higher than the number of clusters for max temperature. This is likely do to more geopgrphical variation, which can affect wind more so than temperature. 
+
+It would be interesting to pair these findings with latitudes and topgraphic data to better understand their relationships. 
+
+Thank you for reading my blog!
